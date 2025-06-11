@@ -10,7 +10,8 @@ import { processDeleteForeignUsers } from "./deleteForeignUsers";
 import { processUpdateForeignUsers } from "./upsertForeignUsers";
 import path from "path";
 import { IObject } from "../types";
-import { AppStateStatus } from "../../types";
+import { AppStateStatus, Message, MessageStatus } from "../../types";
+import { logger } from "../logger";
 require("@dotenvx/dotenvx").config({
   path: path.join(__dirname, "../.env"),
 });
@@ -18,36 +19,29 @@ export async function handleUsersNotification(
   notification: any,
   dynamoDbProvider: DynamoDbProvider,
   cognitoProvider: CognitoProvider
-): Promise<boolean | string | undefined> {
+): Promise<MessageStatus | undefined> {
   try {
-    const parseNot = safeParseString(notification);
-    if (!parseNot) {
-      console.error("Invalid notification format:", notification);
-      return false;
+    const parsedNotification = safeParseString(notification) as Message;
+    if (!parsedNotification) {
+      logger.error("Invalid notification format:" + notification);
+      return MessageStatus.FAILED;
     }
     //move parse notfi to new function - try and catch
-    const parsedNotification: IObject = JSON.parse(notification);
+    // const parsedNotification: Message = JSON.parse(notification);
     const { msg_type, msg_data, msg_date } = parsedNotification;
-    const foreignKey = `${
-      msg_data[0].General_details?.nationalityCode
-    }_${msg_data[0].General_details?.passport_num.toLowerCase()}`;
 
-    const appStateKey = `notification_${getFormattedDateAndTimeOfToday()}_${foreignKey}`;
-    const updateCounter = msg_data.length;
     /// Check if the notification is relevant
     const response = await processNotification(
       dynamoDbProvider,
       cognitoProvider,
       msg_type,
       msg_data,
-      msg_date,
-      appStateKey,
-      updateCounter
+      msg_date
     );
     return response;
   } catch (error: any) {
-    console.error("Error handling user notification:", error.message);
-    return false;
+    logger.error("Error handling user notification:" + error.message);
+    return MessageStatus.FAILED;
   }
 }
 
@@ -56,28 +50,11 @@ async function processNotification(
   cognitoProvider: CognitoProvider,
   msg_type: string,
   msg_data: any[],
-  msg_date: string,
-  appStateKey: string,
-  updateCounter: number
-): Promise<boolean | string | undefined> {
-  const foreignKey = `${
-    msg_data[0].General_details?.nationalityCode
-  }_${msg_data[0].General_details?.passport_num.toLowerCase()}`;
+  msg_date: string
+): Promise<MessageStatus | undefined> {
   try {
     /// if it upsert check if the data is valid
     if (msg_type == "UPSERT") {
-      // Removed at Miriam's request
-      // const isValid = await checkValidData(
-      //   dynamodbProvider,
-      //   msg_date,
-      //   msg_data,
-      //   msg_type
-      // );
-      // if (!isValid) {
-      //   console.log("Message is not valid. Skipping...", foreignKey);
-      //   return false;
-      // }
-
       /// Process the upsert foreign users
       const response = await processUpdateForeignUsers(
         msg_data,
@@ -99,14 +76,15 @@ async function processNotification(
       return response;
     }
 
-    return true;
+    return MessageStatus.SUCCESS;
   } catch (error: any) {
-    console.error("Error processing notification:", error.message);
-    return false;
+    logger.error("Error processing notification:" + error.message);
+    return MessageStatus.FAILED;
   }
 }
 
 // Check if the date of last update or delete is valid
+//Not on use
 export async function checkValidData(
   dynamodbProvider: DynamoDbProvider,
   msg_date: string,

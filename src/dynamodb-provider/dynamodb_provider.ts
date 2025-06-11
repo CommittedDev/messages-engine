@@ -17,6 +17,7 @@ import { unmarshall } from "@aws-sdk/util-dynamodb";
 import { NodeHttpHandler } from "@smithy/node-http-handler";
 import { logger } from "../logger";
 import { marshall } from "@aws-sdk/util-dynamodb";
+import { MessageStatus } from "../../types";
 // const { marshall } = require("@aws-sdk/util-dynamodb");
 
 type AppStateKeys =
@@ -100,7 +101,7 @@ export class DynamoDbProvider {
   }
 
   initial = async () => {
-    console.log("Initializing DynamoDB");
+    logger.info("Initializing DynamoDB");
   };
 
   getUserByForeignKey = async (
@@ -123,7 +124,7 @@ export class DynamoDbProvider {
 
         return unmarshall(response.Item) as IUserRecord;
       } else {
-        console.info(`User with foreign_key ${foreignKey} not found.`);
+        logger.info(`User with foreign_key ${foreignKey} not found.`);
         return null;
       }
     } catch (error) {
@@ -143,10 +144,10 @@ export class DynamoDbProvider {
           },
         })
       );
-      console.info("SignUpAttempt deleted successfully");
+      logger.info("SignUpAttempt deleted successfully");
       return true;
     } catch (error) {
-      console.error(
+      logger.error(
         "Unable to delete FSignUpAttempt item. Error:" + JSON.stringify(error)
       );
       return false;
@@ -156,33 +157,18 @@ export class DynamoDbProvider {
   deleteForeignContent = async (
     foreignKey: string,
     msg_date: string
-  ): Promise<boolean | string> => {
+  ): Promise<MessageStatus> => {
     try {
+      logger.info("starting to clear foreign fields for " + foreignKey);
       const params = {
         TableName: this.foreignTableName,
-        Key: {
-          foreign_key: { S: foreignKey },
-        },
-        UpdateExpression: `
-        REMOVE #field1, #field2, #field3, #field4, #field5, #field6, #field7, #field8, #field9, #field10, #field11, #field12, #field13
-        SET #msg_date = :msg_date
-      `,
+        Item: marshall({
+          foreign_key: foreignKey.toLowerCase(),
+          msg_date: msg_date,
+        }),
         ConditionExpression:
-          "attribute_exists(foreign_key) AND (attribute_not_exists(#msg_date) OR #msg_date < :msg_date)",
+          "attribute_exists(foreign_key) AND attribute_exists(msg_date) AND #msg_date < :msg_date",
         ExpressionAttributeNames: {
-          "#field1": "General_details",
-          "#field2": "Employers",
-          "#field3": "Passports",
-          "#field4": "Visas",
-          "#field5": "Work_permit",
-          "#field6": "Deposits",
-          "#field7": "Last_visa_details",
-          "#field8": "Employers_per_visa",
-          "#field9": "Entries_and_exits",
-          "#field10": "updatedAt",
-          "#field11": "updatedAtFullTime",
-          "#field12": "deposit_files",
-          "#field13": "alerts",
           "#msg_date": "msg_date",
         },
         ExpressionAttributeValues: {
@@ -190,26 +176,32 @@ export class DynamoDbProvider {
         },
       };
 
-      await this.dynamodbClient!.send(new UpdateItemCommand(params));
-      console.info("Foreign fields cleared successfully, msg_date updated.");
-      return true;
+      await this.dynamodbClient!.send(new PutItemCommand(params));
+      logger.info(
+        "Foreign fields cleared successfully, msg_date updated." +
+          msg_date +
+          " for foreign_key: " +
+          foreignKey
+      );
+      return MessageStatus.SUCCESS; // If the deletion is successful, we return success
     } catch (error: any) {
       if (error.name === "ConditionalCheckFailedException") {
         // If the condition is not met, we skip the deletion
-        console.warn(
-          `Deletion skipped for ${foreignKey}: msg_date condition not met.`
+        logger.warn(
+          `Deletion skipped for ${foreignKey}: either foreign_key or msg_date condition not met.`
         );
-        return "skipped"; // If the condition is not met, we skip the deletion
+        return MessageStatus.SKIPPED; // If the condition is not met, we skip the deletion
       }
-      console.error(
+      logger.error(
         "Unable to clear Foreign fields. Error:" + JSON.stringify(error)
       );
-      return false;
+      return MessageStatus.FAILED; // If any other error occurs, we return failed
     }
   };
 
   deleteUser = async (foreignKey: string): Promise<boolean> => {
     try {
+      logger.info("Starting to delete user with foreign_key: " + foreignKey);
       await this.dynamodbClient!.send(
         new DeleteItemCommand({
           TableName: this.usersTableName,
@@ -218,10 +210,12 @@ export class DynamoDbProvider {
           },
         })
       );
-      console.info("User deleted successfully");
+      logger.info(
+        "User deleted successfully" + " with foreign_key: " + foreignKey
+      );
       return true;
     } catch (error) {
-      console.error(
+      logger.error(
         "Unable to delete user item. Error:" + JSON.stringify(error)
       );
       return false;
@@ -323,12 +317,11 @@ export class DynamoDbProvider {
     foreignKey: string,
     data: IObject,
     msg_date: string
-  ): Promise<boolean | string> => {
+  ): Promise<MessageStatus> => {
     try {
-      //remove it
-      if (data.foreign_key) {
-        data.foreign_key = data.foreign_key.toLowerCase();
-      }
+      logger.info(
+        `Starting upsert for foreign record with key ${foreignKey}  at ${getNowISOString()}`
+      );
 
       const fullRecord = {
         msg_date: msg_date,
@@ -341,9 +334,9 @@ export class DynamoDbProvider {
       logger.info(
         `Upserting foreign record with key ${foreignKey} at ${getNowISOString()}`
       );
-      console.log(
-        "Marshalled item:",
-        marshall(fullRecord, { removeUndefinedValues: false })
+      logger.info(
+        "Marshalled item:" +
+          marshall(fullRecord, { removeUndefinedValues: false })
       );
       // Prepare the parameters for the PutItem command
       const putParams = {
@@ -360,20 +353,18 @@ export class DynamoDbProvider {
       };
 
       await this.dynamodbClient.send(new PutItemCommand(putParams));
-      console.log(
+      logger.info(
         `Foreign record with key ${foreignKey} upserted successfully.`
       );
-      return true;
+      return MessageStatus.SUCCESS; // If the upsert is successful, we return success
     } catch (error: any) {
       if (error.name === "ConditionalCheckFailedException") {
         // If the condition is not met, we skip the upsert
-        console.warn(
-          `Upsert skipped for ${foreignKey}: msg_date condition not met.`
-        );
-        return "skipped"; // If the condition is not met, we skip the upsert
+        logger.warn(`Upsert skipped for ${foreignKey}: condition not met.`);
+        return MessageStatus.SKIPPED; // If the condition is not met, we skip the upsert
       }
-      console.error("Error upserting foreign record: " + JSON.stringify(error));
-      return false;
+      logger.error("Error upserting foreign record: " + JSON.stringify(error));
+      return MessageStatus.FAILED; // If any other error occurs, we return failed
     }
   };
 
@@ -465,102 +456,59 @@ export class DynamoDbProvider {
 
       return isValid;
     } catch (error) {
-      console.error("Error validating msg_data:", error);
+      logger.error("Error validating msg_data:" + error);
       return false;
     }
   };
   /// Update message counters in the app state table
-  //change-all nters on one record
-  public updateMessageCounters = async (
-    successCount: number,
-    failureCount: number,
-    skipCount: number = 0,
-    failedMessageDetails?: { msg_id: string; foreignKey: string; error: string }
-  ): Promise<void> => {
+
+  public updateMessageCounters = async (counters: {
+    done: number;
+    error: number;
+    skipped: number;
+  }): Promise<void> => {
     const todayDate = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
-    const successKey = `MessagesSuccess-${todayDate}`;
-    const failureKey = `MessagesFailure-${todayDate}`;
-    const failedMessagesKey = `FailedMessages-${todayDate}`;
-    const skipKey = `MessagesSkip-${todayDate}`;
+    const dailyKey = `MessagesDaily-${todayDate}`; // מפתח יומי עבור הרשומה
+
     try {
-      // update success count
+      logger.info(
+        `Starting - Updating message counters: done=${counters.done}, error=${counters.error}, skipped=${counters.skipped}`
+      );
+
+      // עדכון הרשומה היומית עם כל הערכים
       await this.dynamodbClient.send(
         new UpdateItemCommand({
           TableName: this.appStateTableName,
-          Key: { id: { S: successKey } },
-          UpdateExpression:
-            "SET #value = if_not_exists(#value, :start) + :increment",
+          Key: { id: { S: dailyKey } },
+          UpdateExpression: `
+          SET #done = if_not_exists(#done, :start) + :done,
+              #error = if_not_exists(#error, :start) + :error,
+              #skipped = if_not_exists(#skipped, :start) + :skipped,
+              #total = if_not_exists(#total, :start) + :total
+        `,
           ExpressionAttributeNames: {
-            "#value": "value",
+            "#done": "done",
+            "#error": "error",
+            "#skipped": "skipped",
+            "#total": "total",
           },
           ExpressionAttributeValues: {
             ":start": { N: "0" }, // ערך התחלתי אם המפתח לא קיים
-            ":increment": { N: successCount.toString() }, // הגדלה לפי מספר הצלחות
+            ":done": { N: counters.done.toString() },
+            ":error": { N: counters.error.toString() },
+            ":skipped": { N: counters.skipped.toString() },
+            ":total": {
+              N: (counters.done + counters.error + counters.skipped).toString(),
+            },
           },
         })
       );
 
-      // Update failure count
-      await this.dynamodbClient.send(
-        new UpdateItemCommand({
-          TableName: this.appStateTableName,
-          Key: { id: { S: failureKey } },
-          UpdateExpression:
-            "SET #value = if_not_exists(#value, :start) + :increment",
-          ExpressionAttributeNames: {
-            "#value": "value",
-          },
-          ExpressionAttributeValues: {
-            ":start": { N: "0" }, // ערך התחלתי אם המפתח לא קיים
-            ":increment": { N: failureCount.toString() }, // הגדלה לפי מספר כשלונות
-          },
-        })
+      logger.info(
+        `Message counters updated successfully for ${dailyKey}: done=${counters.done}, error=${counters.error}, skipped=${counters.skipped}`
       );
-      // Update skip count
-      await this.dynamodbClient.send(
-        new UpdateItemCommand({
-          TableName: this.appStateTableName,
-          Key: { id: { S: skipKey } },
-          UpdateExpression:
-            "SET #value = if_not_exists(#value, :start) + :increment",
-          ExpressionAttributeNames: {
-            "#value": "value",
-          },
-          ExpressionAttributeValues: {
-            ":start": { N: "0" },
-            ":increment": { N: skipCount.toString() },
-          },
-        })
-      );
-      // Update failed messages
-      if (failedMessageDetails) {
-        const existingFailedMessages =
-          await this.getFailedMessages(failedMessagesKey);
-        const updatedFailedMessages = [
-          ...existingFailedMessages,
-          {
-            msg_id: failedMessageDetails.msg_id,
-            foreignKey: failedMessageDetails.foreignKey,
-            error: failedMessageDetails.error,
-            timestamp: new Date().toISOString(),
-          },
-        ];
-
-        await this.dynamodbClient.send(
-          new PutItemCommand({
-            TableName: this.appStateTableName,
-            Item: marshall({
-              id: failedMessagesKey,
-              failedMessages: updatedFailedMessages,
-            }),
-          })
-        );
-        console.log(
-          `Failed message saved: msg_id=${failedMessageDetails.msg_id}, foreignKey=${failedMessageDetails.foreignKey}`
-        );
-      }
     } catch (error) {
-      console.error("Error updating message counters:", error);
+      logger.error("Error updating message counters:" + error);
       throw error;
     }
   };
@@ -581,7 +529,7 @@ export class DynamoDbProvider {
       }
       return [];
     } catch (error) {
-      console.error("Error fetching failed messages:", error);
+      logger.error("Error fetching failed messages:" + error);
       return [];
     }
   }

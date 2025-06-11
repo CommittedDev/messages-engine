@@ -1,14 +1,16 @@
 import { DynamoDbProvider } from "../dynamodb-provider/dynamodb_provider";
 import { CognitoProvider } from "../cognito_providers";
+import { logger } from "../logger";
+import { MessageStatus } from "../../types";
 
 export async function processDeleteForeignUsers(
   data: any,
   cognitoProvider: CognitoProvider,
   dynamoDBProvider: DynamoDbProvider,
   msg_date: string
-) {
+): Promise<MessageStatus | undefined> {
   if (!data || !Array.isArray(data)) {
-    console.error("Invalid data structure: 'msg_data' array not found.");
+    logger.error("Invalid data structure: 'msg_data' array not found.");
     return;
   }
   // Check if the data array is empty
@@ -29,9 +31,8 @@ export async function processDeleteForeignUsers(
           );
           return response;
         } catch (error) {
-          console.error(
-            `Error deleting foreign record for passport ${foreignKey}: `,
-            error
+          logger.error(
+            `Error deleting foreign record for passport ${foreignKey}: ` + error
           );
         }
         if (usersFound) {
@@ -41,9 +42,9 @@ export async function processDeleteForeignUsers(
             // Delete the user from Cognito using the cognito_user_name
             await cognitoProvider.deleteUser(cognitoUserName);
           } catch (error) {
-            console.error(
-              `Error deleting Cognito user for cognito_user_name ${cognitoUserName}: `,
-              error
+            logger.error(
+              `Error deleting Cognito user for cognito_user_name ${cognitoUserName}: ` +
+                error
             );
           }
           // Proceed to delete the user record from DynamoDB
@@ -51,24 +52,23 @@ export async function processDeleteForeignUsers(
             // Delete the user record from the users table
             await dynamoDBProvider.deleteUser(foreignKey);
           } catch (error) {
-            console.error(
-              `Error deleting user record for passport ${foreignKey}: `,
-              error
+            logger.error(
+              `Error deleting user record for passport ${foreignKey}: ` + error
             );
           }
         } else {
-          console.warn(
+          logger.warn(
             `User with passport ${foreignKey} does not exist in the users table.`
           );
         }
       } catch (error) {
-        console.error(
-          `Error checking existence of user for passport ${foreignKey}: `,
-          error
+        logger.error(
+          `Error checking existence of user for passport ${foreignKey}: ` +
+            error
         );
       }
     } else {
-      console.warn("Passport number not found in record:", record);
+      logger.warn("Passport number not found in record:" + record);
     }
   }
 }

@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
+    "dev": "cross-env USE_LOCAL_FILE_ENV=true ts-node src/index.ts",
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "tsc",
     "start": " cross-env USE_LOCAL_FILE_ENV=true AWS_SECRET_NAME='piba/dev/global-readonly,piba/dev/global'  npx ts-node src/handel_get_files_from_amazon_mq.ts"

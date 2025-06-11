@@ -1,9 +1,5 @@
 import { configurationProvider } from "./configuration_provider";
 
-export const META_DATA_FILE_NAME = "zarim_MetaData.json";
-export const DEPOSIT_FOLDER_TARGET = "deposits";
-export const FOREIGNERS_ZIP_PREFIX_NAME = "zarim_";
-
 export const GET_APP_RELEVANT_ENV = () => {
   const APP_STATE_TABLE_NAME = configurationProvider.getRequiredValue(
     "APP_STATE_TABLE_NAME"
@@ -45,6 +41,13 @@ export const GET_APP_RELEVANT_ENV = () => {
   const VERIFIED_SES_EMAIL_ADDRESS = configurationProvider.getRequiredValue(
     "VERIFIED_SES_EMAIL_ADDRESS"
   );
+
+  const PREFETCH_MESSAGES_COUNT = configurationProvider.getRequiredValue(
+    "PREFETCH_MESSAGES_COUNT"
+  );
+
+  const RABBITMQ_URL = configurationProvider.getRequiredValue("RABBITMQ_URL");
+  const QUEUE_NAME = configurationProvider.getRequiredValue("QUEUE_NAME");
   const USE_LOCAL_FILE_ENV =
     configurationProvider.getValue("USE_LOCAL_FILE_ENV") == "true";
   return {
@@ -64,5 +67,8 @@ export const GET_APP_RELEVANT_ENV = () => {
     APP_STATE_TABLE_NAME,
     VERIFIED_SES_EMAIL_ADDRESS,
     USE_LOCAL_FILE_ENV,
+    PREFETCH_MESSAGES_COUNT,
+    QUEUE_NAME,
+    RABBITMQ_URL,
   };
 };

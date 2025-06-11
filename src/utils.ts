@@ -1,3 +1,4 @@
+import { UserData } from "../types";
 import { IObject } from "./types";
 
 // const { STSClient, AssumeRoleCommand } = require("@aws-sdk/client-sts");
@@ -103,10 +104,20 @@ export const arrayRemoveDuplicates = (arr: any[]) => {
   return arr.filter((value, index) => arr.indexOf(value) === index);
 };
 
-export  const parseDate = (dateStr: string): Date => {
+export const parseDate = (dateStr: string): Date => {
   const [datePart, timePart] = dateStr.split(" ");
   const [day, month, year] = datePart.split("/");
   return new Date(`${year}-${month}-${day}T${timePart}`);
 };
 
 export const delay = (ms: number) => new Promise((res) => setTimeout(res, ms));
+
+export function getForeignKey(msg_data: UserData): string | null {
+  if (!msg_data) return null;
+
+  const details = msg_data.General_details;
+
+  if (!details?.nationalityCode || !details?.passport_num) return null;
+
+  return `${details.nationalityCode}_${details.passport_num.toLowerCase()}`;
+}
