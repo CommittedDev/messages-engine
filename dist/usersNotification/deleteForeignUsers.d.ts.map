@@ -1,0 +1,1 @@
+{"version":3,"file":"deleteForeignUsers.d.ts","sourceRoot":"","sources":["../../src/usersNotification/deleteForeignUsers.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,gBAAgB,EAAE,MAAM,sBAAsB,CAAC;AACxD,OAAO,EAAE,eAAe,EAAE,MAAM,sBAAsB,CAAC;AAEvD,wBAAsB,yBAAyB,CAC7C,IAAI,EAAE,GAAG,EACT,eAAe,EAAE,eAAe,EAChC,gBAAgB,EAAE,gBAAgB,iBA8DnC"}
