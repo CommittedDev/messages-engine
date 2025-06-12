@@ -53,6 +53,7 @@ export async function processMessage(
         error: 0,
         skipped: 1,
       });
+      logger.info("Message processing skipped, updating counters");
       channel.ack(message);
     }
   } catch (error: any) {
