@@ -58,7 +58,7 @@ export class AlertsProvider {
       };
       await mailProvider.sendEmailByNodeMailer(emailMessage);
     } catch (error) {
-      console.error("Failed to send alert:", error);
+      logger.error("Failed to send alert:" + error);
     }
   };
   public sendAlertError = async (error: string): Promise<void> => {
@@ -77,7 +77,7 @@ export class AlertsProvider {
       };
       await mailProvider.sendEmailByNodeMailer(emailMessage);
     } catch (error) {
-      console.error("Failed to send alert:", error);
+      logger.error("Failed to send alert:" + error);
     }
   };
 }

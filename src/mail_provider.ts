@@ -17,9 +17,9 @@ class MailProvider {
         pass: process.env.GMAIL_PASS,
       },
     });
-    console.log(
-      "MailProvider - sendEmailByNodeMailer - message: ",
-      transporter
+    logger.info(
+      "MailProvider - sendEmailByNodeMailer - Sending email via Nodemailer with the following options: " +
+        JSON.stringify(message)
     );
     const mailOptions: {
       from?: string;
