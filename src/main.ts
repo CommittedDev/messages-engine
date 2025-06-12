@@ -1,12 +1,12 @@
 import { connectToRabbitMQ, setupChannel } from "./rabbitmq/rabbitmq";
 import { processMessage } from "./rabbitmq/message_processor";
 import { initializeProviders } from "./rabbitmq/initial_provider";
-import path from "path";
 import { logger } from "./logger";
 import { configurationProvider } from "./configuration_provider";
-
+import { alertsProvider } from "./alerts_provider";
 const MAX_RETRIES = 3;
-
+const MAX_MESSAGES = 100;
+const DEV_MAX_MESSAGES = 6;
 export async function runConsumerWithRetries() {
   let retryCount = 0;
   const DEV_MODE = configurationProvider.getValue("DEV_MODE");
@@ -23,6 +23,8 @@ export async function runConsumerWithRetries() {
 
       if (retryCount >= MAX_RETRIES) {
         logger.error("Maximum retry attempts reached. Exiting process.");
+        await alertsProvider.sendAlertError(error as string); // שליחת מייל במקרה של נפילה סופית
+
         process.exit(1);
       }
 
@@ -41,27 +43,36 @@ export async function consumeAndProcessMessages(): Promise<void> {
 
   const connection = await connectToRabbitMQ();
   const channel = await setupChannel(connection);
-  const { dynamodbProvider, cognitoProvider } = await initializeProviders();
-  const MAX_MESSAGES = 6;
+
   let processedMessages = 0;
   logger.info(`Waiting for messages in queue: ${QUEUE_NAME}`);
-  channel.prefetch(MAX_MESSAGES); // הגבלת מספר ההודעות שייכנסו לצרכן
+  channel.prefetch(MAX_MESSAGES); // Set prefetch count to limit the number of unacknowledged messages
 
   channel.consume(
     QUEUE_NAME,
-    (message) => {
+    async (message) => {
+      processedMessages++;
+      if (!message) {
+        console.log("No message received, exiting consumer.");
+        //check when to send this email
+
+        return;
+      }
       if (DEV_MODE == "true") {
-        if (processedMessages >= MAX_MESSAGES) {
+        if (processedMessages >= 10) {
           logger.info(
             "Maximum number of messages processed. Stopping consumer."
           );
-          // channel.close(); // סגירת הצרכן לאחר עיבוד 5 הודעות
-          // connection.close(); // סגירת החיבור ל-RabbitMQ
           return;
         }
       }
-      processMessage(channel, message, dynamodbProvider, cognitoProvider),
-        processedMessages++;
+      (async () => {
+        const startTime = Date.now();
+
+        await processMessage(channel, message);
+        const duration = Date.now() - startTime;
+        logger.info(`Message processed in ${duration}ms by PID ${process.pid}`);
+      })();
     },
     { noAck: false }
   );
@@ -77,7 +88,3 @@ export async function consumeAndProcessMessages(): Promise<void> {
     });
   });
 }
-// // Run the function
-// (async () => {
-//   await consumeAndProcessMessages();
-// })();

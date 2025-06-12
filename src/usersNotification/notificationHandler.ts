@@ -1,24 +1,16 @@
-import {
-  getFormattedDateAndTimeOfToday,
-  safeParseString,
-} from "../../dist/utils";
+import { safeParseString } from "../../dist/utils";
 import { CognitoProvider } from "../cognito_providers";
-import { configurationProvider } from "../configuration_provider";
-import { DynamoDbProvider } from "../dynamodb-provider/dynamodb_provider";
-import { GET_APP_RELEVANT_ENV } from "../env_and_consts";
+import { dynamoDbProvider } from "../dynamodb-provider/dynamodb_provider";
 import { processDeleteForeignUsers } from "./deleteForeignUsers";
 import { processUpdateForeignUsers } from "./upsertForeignUsers";
 import path from "path";
-import { IObject } from "../types";
-import { AppStateStatus, Message, MessageStatus } from "../../types";
+import { Message, MessageStatus } from "../../types";
 import { logger } from "../logger";
 require("@dotenvx/dotenvx").config({
   path: path.join(__dirname, "../.env"),
 });
 export async function handleUsersNotification(
-  notification: any,
-  dynamoDbProvider: DynamoDbProvider,
-  cognitoProvider: CognitoProvider
+  notification: any
 ): Promise<MessageStatus | undefined> {
   try {
     const parsedNotification = safeParseString(notification) as Message;
@@ -31,13 +23,7 @@ export async function handleUsersNotification(
     const { msg_type, msg_data, msg_date } = parsedNotification;
 
     /// Check if the notification is relevant
-    const response = await processNotification(
-      dynamoDbProvider,
-      cognitoProvider,
-      msg_type,
-      msg_data,
-      msg_date
-    );
+    const response = await processNotification(msg_type, msg_data, msg_date);
     return response;
   } catch (error: any) {
     logger.error("Error handling user notification:" + error.message);
@@ -46,8 +32,6 @@ export async function handleUsersNotification(
 }
 
 async function processNotification(
-  dynamodbProvider: DynamoDbProvider,
-  cognitoProvider: CognitoProvider,
   msg_type: string,
   msg_data: any[],
   msg_date: string
@@ -56,11 +40,7 @@ async function processNotification(
     /// if it upsert check if the data is valid
     if (msg_type == "UPSERT") {
       /// Process the upsert foreign users
-      const response = await processUpdateForeignUsers(
-        msg_data,
-        msg_date,
-        dynamodbProvider
-      );
+      const response = await processUpdateForeignUsers(msg_data, msg_date);
       return response;
     }
 
@@ -69,8 +49,7 @@ async function processNotification(
     if (msg_type === "DELETE") {
       const response = await processDeleteForeignUsers(
         msg_data,
-        cognitoProvider,
-        dynamodbProvider,
+
         msg_date
       );
       return response;
@@ -81,16 +60,4 @@ async function processNotification(
     logger.error("Error processing notification:" + error.message);
     return MessageStatus.FAILED;
   }
-}
-
-// Check if the date of last update or delete is valid
-//Not on use
-export async function checkValidData(
-  dynamodbProvider: DynamoDbProvider,
-  msg_date: string,
-  msg_data: any[],
-  msg_type: string
-): Promise<boolean> {
-  const validData = dynamodbProvider.isMsgDataValid(msg_data);
-  return validData;
 }

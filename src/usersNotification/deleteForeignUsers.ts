@@ -1,35 +1,38 @@
-import { DynamoDbProvider } from "../dynamodb-provider/dynamodb_provider";
-import { CognitoProvider } from "../cognito_providers";
+import { dynamoDbProvider } from "../dynamodb-provider/dynamodb_provider";
+import { cognitoProvider, CognitoProvider } from "../cognito_providers";
 import { logger } from "../logger";
 import { MessageStatus } from "../../types";
+import { getForeignKey } from "../utils";
 
 export async function processDeleteForeignUsers(
   data: any,
-  cognitoProvider: CognitoProvider,
-  dynamoDBProvider: DynamoDbProvider,
   msg_date: string
 ): Promise<MessageStatus | undefined> {
-  if (!data || !Array.isArray(data)) {
-    logger.error("Invalid data structure: 'msg_data' array not found.");
+  if (!data || !Array.isArray(data) || data.length > 1) {
+    logger.error("Invalid data structure: 'msg_data' " + data.length);
     return;
   }
+  let response: MessageStatus | undefined = undefined;
   // Check if the data array is empty
   for (const record of data) {
-    const foreignKey = `${
-      record.General_details?.nationalityCode
-    }_${record.General_details?.passport_num.toLowerCase()}`;
+    const foreignKey = getForeignKey(record);
     if (foreignKey) {
       try {
+        logger.info(
+          `Starting - Processing deletion for foreignKey: ${foreignKey} at date: ${msg_date}`
+        );
         // Get user details from users table using the foreignKey
         const usersFound =
-          await dynamoDBProvider.getUserByForeignKey(foreignKey);
+          await dynamoDbProvider.getUserByForeignKey(foreignKey);
         // Proceed to delete records from the foreign table
         try {
-          const response = await dynamoDBProvider.deleteForeignContent(
+          response = await dynamoDbProvider.deleteForeignContent(
             foreignKey,
             msg_date
           );
-          return response;
+          logger.info(
+            `Foreign record deleted successfully for passport ${foreignKey}-${response}`
+          );
         } catch (error) {
           logger.error(
             `Error deleting foreign record for passport ${foreignKey}: ` + error
@@ -41,6 +44,9 @@ export async function processDeleteForeignUsers(
           try {
             // Delete the user from Cognito using the cognito_user_name
             await cognitoProvider.deleteUser(cognitoUserName);
+            logger.info(
+              `Cognito user deleted successfully for cognito_user_name ${cognitoUserName}`
+            );
           } catch (error) {
             logger.error(
               `Error deleting Cognito user for cognito_user_name ${cognitoUserName}: ` +
@@ -50,7 +56,10 @@ export async function processDeleteForeignUsers(
           // Proceed to delete the user record from DynamoDB
           try {
             // Delete the user record from the users table
-            await dynamoDBProvider.deleteUser(foreignKey);
+            await dynamoDbProvider.deleteUser(foreignKey);
+            logger.info(
+              `User from users record deleted successfully for passport ${foreignKey}`
+            );
           } catch (error) {
             logger.error(
               `Error deleting user record for passport ${foreignKey}: ` + error
@@ -71,4 +80,5 @@ export async function processDeleteForeignUsers(
       logger.warn("Passport number not found in record:" + record);
     }
   }
+  return response;
 }

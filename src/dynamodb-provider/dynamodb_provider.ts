@@ -3,21 +3,19 @@ import https from "https";
 import {
   BatchGetItemCommand,
   BatchWriteItemCommand,
-  CreateTableCommand,
   DeleteItemCommand,
   DynamoDBClient,
   GetItemCommand,
   PutItemCommand,
-  ScanCommand,
-  ScanCommandInput,
   UpdateItemCommand,
 } from "@aws-sdk/client-dynamodb";
-import { isForeignersDataArray, parseDate } from "../utils";
 import { unmarshall } from "@aws-sdk/util-dynamodb";
 import { NodeHttpHandler } from "@smithy/node-http-handler";
 import { logger } from "../logger";
 import { marshall } from "@aws-sdk/util-dynamodb";
 import { MessageStatus } from "../../types";
+import { GET_APP_RELEVANT_ENV } from "../env_and_consts";
+import { configurationProvider } from "../configuration_provider";
 // const { marshall } = require("@aws-sdk/util-dynamodb");
 
 type AppStateKeys =
@@ -33,7 +31,7 @@ const getForeignerKey = (data: IObject): string => {
 };
 
 let agent = new https.Agent({
-  maxSockets: 25, // https://docs.aws.amazon.com/sdk-for-javascript/v3/developer-guide/node-configuring-maxsockets.html
+  maxSockets: 50, // https://docs.aws.amazon.com/sdk-for-javascript/v3/developer-guide/node-configuring-maxsockets.html
 });
 
 export const isErrorOfItemLimitSize = (error: any) =>
@@ -50,13 +48,15 @@ const getNowISOString = () => {
   return now.toISOString();
 };
 
-export class DynamoDbProvider {
-  foreignTableName: string;
-  usersTableName: string;
-  signUpsTableName: string;
-  appStateTableName: string;
-  disablePassportValidation: boolean;
-  dynamodbClient: DynamoDBClient;
+class DynamoDbProvider {
+  foreignTableName: string = "";
+  usersTableName: string = "";
+  signUpsTableName: string = "";
+  disablePassportValidation: boolean = false;
+  dynamoDbClient: DynamoDBClient | undefined;
+  tokensTableName: string = "";
+  appStateTableName: string = "";
+  constructor() {}
 
   public newDataCounters: { [key: string]: number } = {
     runs: 0,
@@ -78,30 +78,36 @@ export class DynamoDbProvider {
   static WRITE_BATCH = 25;
   static MAX_CONCURRENT_BATCHES = 5;
 
-  constructor(args: {
-    foreignTableName: string;
-    usersTableName: string;
-    signUpsTableName: string;
-    appStateTableName: string;
-    disablePassportValidation: boolean;
-  }) {
-    this.foreignTableName = args.foreignTableName;
-    this.usersTableName = args.usersTableName;
-    this.signUpsTableName = args.signUpsTableName;
-    this.disablePassportValidation = args.disablePassportValidation;
-    this.appStateTableName = args.appStateTableName;
-
-    this.dynamodbClient = new DynamoDBClient({
+  initialize = async () => {
+    this.foreignTableName = configurationProvider.getRequiredValue(
+      "FOREIGNS_TABLE_NAME"
+    );
+    this.usersTableName =
+      configurationProvider.getRequiredValue("USERS_TABLE_NAME");
+    this.signUpsTableName = configurationProvider.getRequiredValue(
+      "SIGN_UP_ATTEMPTS_TABLE_NAME"
+    );
+    this.appStateTableName = configurationProvider.getRequiredValue(
+      "APP_STATE_TABLE_NAME"
+    );
+    this.disablePassportValidation =
+      configurationProvider.getValue("DISABLE_PASSPORT_VALIDATION") === "true";
+    this.dynamoDbClient = new DynamoDBClient({
       region: "il-central-1",
       requestHandler: new NodeHttpHandler({
-        requestTimeout: 0,
+        requestTimeout: 3000,
         httpsAgent: agent,
       }),
     });
-  }
 
-  initial = async () => {
-    logger.info("Initializing DynamoDB");
+    console.log("foreignTableName: " + this.foreignTableName);
+    console.log("usersTableName: " + this.usersTableName);
+    console.log(
+      "signUpAttemptsTableName: " +
+        configurationProvider.getRequiredValue("SIGN_UP_ATTEMPTS_TABLE_NAME")
+    );
+
+    console.log("DynamoDB provider initialized");
   };
 
   getUserByForeignKey = async (
@@ -117,7 +123,7 @@ export class DynamoDbProvider {
       };
 
       const command = new GetItemCommand(params);
-      const response = await this.dynamodbClient.send(command);
+      const response = await this.dynamoDbClient!.send(command);
 
       if (response.Item) {
         const user = unmarshall(response.Item) as IUserRecord;
@@ -136,7 +142,7 @@ export class DynamoDbProvider {
   };
   deleteSignUpAttempts = async (foreignKey: string) => {
     try {
-      await this.dynamodbClient!.send(
+      await this.dynamoDbClient!.send(
         new DeleteItemCommand({
           TableName: this.signUpsTableName,
           Key: {
@@ -176,7 +182,7 @@ export class DynamoDbProvider {
         },
       };
 
-      await this.dynamodbClient!.send(new PutItemCommand(params));
+      await this.dynamoDbClient!.send(new PutItemCommand(params));
       logger.info(
         "Foreign fields cleared successfully, msg_date updated." +
           msg_date +
@@ -202,7 +208,7 @@ export class DynamoDbProvider {
   deleteUser = async (foreignKey: string): Promise<boolean> => {
     try {
       logger.info("Starting to delete user with foreign_key: " + foreignKey);
-      await this.dynamodbClient!.send(
+      await this.dynamoDbClient!.send(
         new DeleteItemCommand({
           TableName: this.usersTableName,
           Key: {
@@ -236,7 +242,7 @@ export class DynamoDbProvider {
       },
     };
     try {
-      const data = await this.dynamodbClient.send(
+      const data = await this.dynamoDbClient!.send(
         new BatchGetItemCommand({
           RequestItems: {
             [this.appStateTableName]: {
@@ -289,7 +295,7 @@ export class DynamoDbProvider {
     };
 
     try {
-      await this.dynamodbClient.send(
+      await this.dynamoDbClient!.send(
         new BatchWriteItemCommand({
           RequestItems: {
             [this.appStateTableName]: [
@@ -352,7 +358,7 @@ export class DynamoDbProvider {
         },
       };
 
-      await this.dynamodbClient.send(new PutItemCommand(putParams));
+      await this.dynamoDbClient!.send(new PutItemCommand(putParams));
       logger.info(
         `Foreign record with key ${foreignKey} upserted successfully.`
       );
@@ -368,98 +374,6 @@ export class DynamoDbProvider {
     }
   };
 
-  // checkLastMessageDate = async (
-  //   msg_type: string,
-  //   msg_data: any[],
-  //   lastMessageDate: string
-  // ): Promise<boolean> => {
-  //   const foreignKey = msg_data[0]?.General_details
-  //     ? `${msg_data[0].General_details.nationalityCode}_${msg_data[0].General_details.passport_num.toLowerCase()}`
-  //     : "";
-  //   const params = {
-  //     TableName: this.foreignTableName,
-  //     Key: {
-  //       foreign_key: { S: foreignKey },
-  //     },
-  //   };
-
-  //   try {
-  //     const data = await this.dynamodbClient.send(
-  //       new BatchGetItemCommand({
-  //         RequestItems: {
-  //           [this.foreignTableName]: {
-  //             Keys: [params.Key],
-  //             ProjectionExpression: "msg_date",
-  //           },
-  //         },
-  //       })
-  //     );
-
-  //     if (data.Responses && data.Responses[this.foreignTableName].length > 0) {
-  //       // If an item is found, check the msg_date
-  //       const item = data.Responses[this.foreignTableName][0];
-  //       if (item && item["msg_date"] && item["msg_date"]["S"]) {
-  //         const itemDate = parseDate(item["msg_date"]["S"]);
-  //         const lastDate = parseDate(lastMessageDate);
-  //         return itemDate < lastDate;
-  //       }
-  //     } else if (msg_type == "UPSERT") {
-  //       // If no item found and the message type is UPSERT, we consider it valid
-  //       return true;
-  //     }
-  //     const reason = "Message - the item to delete is not Exists.";
-  //     const logEntry = `Type: ${msg_type}, Date: ${lastMessageDate}, Reason: ${reason}\n`;
-  //     require("fs").appendFileSync("invalid_messages.log", logEntry);
-  //     return false; // If no item found, return false
-  //   } catch (error) {
-  //     logger.error(
-  //       "Error checking last message date: " + JSON.stringify(error)
-  //     );
-  //     throw error;
-  //   }
-  // };
-
-  public isMsgDataValid = (msg_data: IObject): boolean => {
-    try {
-      // Validate General_details
-      const hasValidArrival = msg_data[0].General_details?.arrival != 0;
-      const hasValidInIsrael = msg_data[0].General_details?.in_israel === true;
-
-      // Validate Last_visa_details
-      const hasValidLastVisaValidToDate =
-        msg_data[0].Last_visa_details?.valid_to != "0001-01-01T00:00:00";
-
-      // Validate Passports
-      const isValidPassportExpiry =
-        this.disablePassportValidation ||
-        (Array.isArray(msg_data[0].Passports) &&
-          msg_data[0].Passports.some(
-            (passport: {
-              passport_num: any;
-              valid_until: string | number | Date | null;
-            }) => {
-              return (
-                passport.passport_num ===
-                  msg_data[0].General_details?.passport_num &&
-                passport.valid_until !== null &&
-                new Date(passport.valid_until) >= new Date()
-              );
-            }
-          ));
-
-      // Combine all validations
-      const isValid =
-        hasValidArrival &&
-        hasValidInIsrael &&
-        hasValidLastVisaValidToDate &&
-        isValidPassportExpiry;
-
-      return isValid;
-    } catch (error) {
-      logger.error("Error validating msg_data:" + error);
-      return false;
-    }
-  };
   /// Update message counters in the app state table
 
   public updateMessageCounters = async (counters: {
@@ -476,7 +390,7 @@ export class DynamoDbProvider {
       );
 
       // עדכון הרשומה היומית עם כל הערכים
-      await this.dynamodbClient.send(
+      await this.dynamoDbClient!.send(
         new UpdateItemCommand({
           TableName: this.appStateTableName,
           Key: { id: { S: dailyKey } },
@@ -512,11 +426,39 @@ export class DynamoDbProvider {
       throw error;
     }
   };
+  public getMessageCounters = async (): Promise<any> => {
+    const todayDate = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+    const dailyKey = `MessagesDaily-${todayDate}`; // מפתח יומי עבור הרשומה
+    try {
+      logger.info(`Fetching message counters for ${dailyKey}`);
+      const response = await this.dynamoDbClient!.send(
+        new GetItemCommand({
+          TableName: this.appStateTableName,
+          Key: { id: { S: dailyKey } },
+        })
+      );
+      if (response.Item) {
+        const unmarshalledItem = unmarshall(response.Item);
+        return {
+          done: unmarshalledItem.done || 0,
+          error: unmarshalledItem.error || 0,
+          skipped: unmarshalledItem.skipped || 0,
+          total: unmarshalledItem.total || 0,
+        };
+      } else {
+        logger.info(`No counters found for ${dailyKey}`);
+        return { done: 0, error: 0, skipped: 0, total: 0 };
+      }
+    } catch (error) {
+      logger.error("Error fetching message counters:" + error);
+      throw error;
+    }
+  };
 
   // Fetches failed messages from the app state table
   private async getFailedMessages(failedMessagesKey: string): Promise<any[]> {
     try {
-      const response = await this.dynamodbClient.send(
+      const response = await this.dynamoDbClient!.send(
         new GetItemCommand({
           TableName: this.appStateTableName,
           Key: { id: { S: failedMessagesKey } },
@@ -534,3 +476,5 @@ export class DynamoDbProvider {
     }
   }
 }
+
+export const dynamoDbProvider = new DynamoDbProvider();

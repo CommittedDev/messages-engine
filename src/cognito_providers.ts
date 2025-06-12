@@ -1,13 +1,13 @@
-import { NodeHttpHandler } from '@smithy/node-http-handler';
-import https from 'https';
-import { logger } from './logger';
-import { assumeRole, IAssumeRoleResponse } from './utils';
+import { NodeHttpHandler } from "@smithy/node-http-handler";
+import https from "https";
+import { logger } from "./logger";
+import { assumeRole, IAssumeRoleResponse } from "./utils";
 import {
   AdminCreateUserCommand,
   AdminDeleteUserCommand,
   CognitoIdentityProviderClient,
-} from '@aws-sdk/client-cognito-identity-provider';
-import { v4 as uuidv4 } from 'uuid';
+} from "@aws-sdk/client-cognito-identity-provider";
+import { v4 as uuidv4 } from "uuid";
 
 let agent = new https.Agent({
   maxSockets: 25, // https://docs.aws.amazon.com/sdk-for-javascript/v3/developer-guide/node-configuring-maxsockets.html
@@ -19,11 +19,11 @@ interface ICognitoUser {
   email: string;
   phone_number: string;
   // Custom attributes
-  'custom:passport_num': string;
-  'custom:nationality_code': string;
-  'custom:foreign_key': string;
-  'custom:visa_expiry': string;
-  'custom:arrival': string;
+  "custom:passport_num": string;
+  "custom:nationality_code": string;
+  "custom:foreign_key": string;
+  "custom:visa_expiry": string;
+  "custom:arrival": string;
 }
 
 export class CognitoProvider {
@@ -45,16 +45,16 @@ export class CognitoProvider {
   }) => {
     try {
       this.userPoolId = userPoolId;
-      logger.info('CognitoProvider - initializing..');
+      logger.info("CognitoProvider - initializing..");
       if (withCredentials) {
         if (!roleArn) {
           throw new Error(
-            'Role ARN is required for initializing with credentials'
+            "Role ARN is required for initializing with credentials"
           );
         }
-        this.credentials = await assumeRole(roleArn, 's3-role');
+        this.credentials = await assumeRole(roleArn, "s3-role");
         this.cognitoClient = new CognitoIdentityProviderClient({
-          region: 'il-central-1',
+          region: "il-central-1",
           credentials: {
             accessKeyId: this.credentials.accessKeyId,
             secretAccessKey: this.credentials.secretAccessKey,
@@ -67,15 +67,15 @@ export class CognitoProvider {
         });
         this.isReady = true;
         logger.info(
-          'CognitoProvider - initialization completed with credentials.'
+          "CognitoProvider - initialization completed with credentials."
         );
       } else {
         this.cognitoClient = new CognitoIdentityProviderClient({
-          region: 'il-central-1',
+          region: "il-central-1",
         });
         this.isReady = true;
         logger.info(
-          'CognitoProvider - initialization completed - without credentials.'
+          "CognitoProvider - initialization completed - without credentials."
         );
       }
     } catch (error) {
@@ -89,7 +89,7 @@ export class CognitoProvider {
   };
   private deleteUsersByUsersName = async (userName: string) => {
     if (!this.cognitoClient || !this.userPoolId || !this.isReady) {
-      throw new Error('Cognito client is not initialized');
+      throw new Error("Cognito client is not initialized");
     }
 
     const deleteUserParams = {
@@ -101,15 +101,18 @@ export class CognitoProvider {
     try {
       await this.cognitoClient.send(deleteUserCommand);
       console.log(`Cognito Provider - Deleting user ${userName} - Success`);
-
     } catch (error) {
-      const isNotFoundError = (error as any).name === 'UserNotFoundException';
+      const isNotFoundError = (error as any).name === "UserNotFoundException";
       if (isNotFoundError) {
-        console.error(`Cognito Provider - Deleting user Error - User ${userName} not found`);
+        console.error(
+          `Cognito Provider - Deleting user Error - User ${userName} not found`
+        );
       } else {
-        console.error(`Cognito Provider - Deleting user Error - deleting user ${userName}:` + JSON.stringify(error));
+        console.error(
+          `Cognito Provider - Deleting user Error - deleting user ${userName}:` +
+            JSON.stringify(error)
+        );
       }
-      
     }
   };
 
@@ -123,28 +126,28 @@ export class CognitoProvider {
     email_verified: string;
   }) => {
     if (!this.cognitoClient || !this.userPoolId || !this.isReady) {
-      throw new Error('Cognito client is not initialized');
+      throw new Error("Cognito client is not initialized");
     }
     const command = new AdminCreateUserCommand({
       UserPoolId: this.userPoolId!,
       Username: userData.email,
       UserAttributes: [
-        { Name: 'custom:passport_num', Value: userData.passport_num },
+        { Name: "custom:passport_num", Value: userData.passport_num },
         {
-          Name: 'custom:nationality_code',
+          Name: "custom:nationality_code",
           Value: userData.nationality_code.toString(),
         },
         {
-          Name: 'custom:foreign_key',
+          Name: "custom:foreign_key",
           Value: userData.foreign_key,
         },
-        { Name: 'custom:visa_expiry', Value: userData.visa_expiry },
-        { Name: 'custom:arrival', Value: userData.arrival.toString() },
-        { Name: 'email', Value: userData.email },
-        { Name: 'email_verified', Value: 'true' },
+        { Name: "custom:visa_expiry", Value: userData.visa_expiry },
+        { Name: "custom:arrival", Value: userData.arrival.toString() },
+        { Name: "email", Value: userData.email },
+        { Name: "email_verified", Value: "true" },
       ],
-      TemporaryPassword: 'TempPassword123!', // You can set this to any temporary password you like
-      MessageAction: 'SUPPRESS', // Suppress sending the welcome email
+      TemporaryPassword: "TempPassword123!", // You can set this to any temporary password you like
+      MessageAction: "SUPPRESS", // Suppress sending the welcome email
     });
     try {
       const response = await this.cognitoClient?.send(command);
@@ -211,3 +214,4 @@ export class CognitoProvider {
   //   }
   // }
 }
+export const cognitoProvider = new CognitoProvider();

@@ -1,16 +1,14 @@
 import { Channel, ConsumeMessage } from "amqplib";
 import { handleUsersNotification } from "../usersNotification/notificationHandler";
-import { DynamoDbProvider } from "../dynamodb-provider/dynamodb_provider";
-import { CognitoProvider } from "../cognito_providers";
+import { dynamoDbProvider } from "../dynamodb-provider/dynamodb_provider";
+import { cognitoProvider } from "../cognito_providers";
 import { saveFailedMessage, saveNewMessage } from "./message_storage";
 import { logger } from "../logger";
 import { MessageStatus } from "../../types";
 
 export async function processMessage(
   channel: Channel,
-  message: ConsumeMessage | null,
-  dynamodbProvider: DynamoDbProvider,
-  cognitoProvider: CognitoProvider
+  message: ConsumeMessage | null
 ): Promise<void> {
   if (!message) return;
   const devMode = process.env.DEV_MODE === "true";
@@ -18,11 +16,7 @@ export async function processMessage(
     logger.info("Start processing message...");
     const messageContent = message.content.toString();
     //Handle the message content
-    const response = await handleUsersNotification(
-      messageContent,
-      dynamodbProvider,
-      cognitoProvider
-    );
+    const response = await handleUsersNotification(messageContent);
     //save message on file - for testing purposes
     //add env on local
     if (devMode) await saveNewMessage(messageContent);
@@ -34,14 +28,14 @@ export async function processMessage(
     // If response is false, it means the message processing failed
 
     if (response === MessageStatus.SUCCESS) {
-      await dynamodbProvider.updateMessageCounters({
+      await dynamoDbProvider.updateMessageCounters({
         done: 1,
         error: 0,
         skipped: 0,
       });
       channel.ack(message);
     } else if (response === MessageStatus.FAILED) {
-      await dynamodbProvider.updateMessageCounters({
+      await dynamoDbProvider.updateMessageCounters({
         done: 0,
         error: 1,
         skipped: 0,
@@ -54,7 +48,7 @@ export async function processMessage(
       channel.ack(message);
     } else {
       //if response is skipped
-      await dynamodbProvider.updateMessageCounters({
+      await dynamoDbProvider.updateMessageCounters({
         done: 0,
         error: 0,
         skipped: 1,
@@ -62,7 +56,7 @@ export async function processMessage(
       channel.ack(message);
     }
   } catch (error: any) {
-    await dynamodbProvider.updateMessageCounters({
+    await dynamoDbProvider.updateMessageCounters({
       done: 0,
       error: 1,
       skipped: 0,

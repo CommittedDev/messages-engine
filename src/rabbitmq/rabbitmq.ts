@@ -1,4 +1,4 @@
-import amqp, { ConsumeMessage, Channel, Connection } from "amqplib";
+import amqp from "amqplib";
 import { logger } from "../logger";
 import { configurationProvider } from "../configuration_provider";
 

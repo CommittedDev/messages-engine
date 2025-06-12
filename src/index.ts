@@ -1,11 +1,14 @@
 import express from "express";
+import cron from "node-cron";
 
-import { CognitoProvider } from "./cognito_providers";
+import { cognitoProvider } from "./cognito_providers";
 import { configurationProvider } from "./configuration_provider";
-import { DynamoDbProvider } from "./dynamodb-provider/dynamodb_provider";
+import { dynamoDbProvider } from "./dynamodb-provider/dynamodb_provider";
 import { GET_APP_RELEVANT_ENV } from "./env_and_consts";
 import { logger } from "./logger";
-import { consumeAndProcessMessages, runConsumerWithRetries } from "./main";
+import { runConsumerWithRetries } from "./main";
+import { mailProvider } from "./mail_provider";
+import { alertsProvider } from "./alerts_provider";
 const { version } = require("../package.json");
 
 const app = express();
@@ -17,7 +20,11 @@ app.get("/", (req, res) => {
 app.get("/health", (req, res) => {
   res.send(`Server is healthy - version ${version}`);
 });
-
+// Set up a cron job to run daily at 9:00 AM
+cron.schedule("0 9 * * *", () => {
+  logger.info("⏰ Running daily email job at 9:00 AM");
+  alertsProvider.sendAlertSummary();
+});
 const start = async () => {
   logger.info("Initializing Messages-engine start, version: " + version);
 
@@ -58,25 +65,13 @@ const start = async () => {
   /**
    * Initialize the cognito provider
    */
-  const cognitoProvider = new CognitoProvider();
   await cognitoProvider.init({
     withCredentials: true,
     roleArn: COGNITO_ROLE_ARN,
     userPoolId: AWS_COGNITO_USER_POOL_ID,
   });
 
-  /**
-   * Initialize the dynamoDb provider
-   */
-  const dynamoDbProvider = new DynamoDbProvider({
-    foreignTableName: FOREIGNS_TABLE_NAME,
-    usersTableName: USERS_TABLE_NAME,
-    appStateTableName: APP_STATE_TABLE_NAME,
-    disablePassportValidation: DISABLE_PASSPORT_VALIDATION,
-    signUpsTableName: SIGN_UP_ATTEMPTS_TABLE_NAME,
-  });
-  await dynamoDbProvider.initial();
-
+  await dynamoDbProvider.initialize();
   console.log("Service is running");
 
   app.listen(port, () => {
@@ -87,7 +82,7 @@ const start = async () => {
 
   // await handleProcessProvider.onServerStart();
 
-  logger.info("Service is running - Start pulling");
+  console.log("Service is running - Start pulling");
 
   await runConsumerWithRetries();
 };
