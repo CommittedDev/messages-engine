@@ -80,14 +80,14 @@ const start = async () => {
   console.log("Service is running");
 
   app.listen(port, () => {
-    console.log(
+    logger.info(
       `Express app listening on port ${port} - just to keep the process running and response to health checks`
     );
   });
 
   // await handleProcessProvider.onServerStart();
 
-  console.log("Service is running - Start pulling");
+  logger.info("Service is running - Start pulling");
 
   await runConsumerWithRetries();
 };
