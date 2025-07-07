@@ -1,20 +1,26 @@
 import nodemailer from "nodemailer";
 import { IEmailMessage } from "./types";
 import { logger } from "./logger";
+import { configurationProvider } from "./configuration_provider";
 
 class MailProvider {
+  /*-------------MailProvider - constructor ---------------------*/
+
   constructor() {}
 
   /*-------------sendEmailByNodeMailer - send email by nodemailer ---------------------*/
-  async sendEmailByNodeMailer(message: IEmailMessage) {
+  async sendEmailByNodeMailer(
+    message: IEmailMessage,
+    passwordEmail?: string
+  ): Promise<boolean> {
     const transporter = nodemailer.createTransport({
       service: "gmail",
       host: "smtp.gmail.com",
       port: 465,
       secure: true,
       auth: {
-        user: process.env.GMAIL_USER,
-        pass: process.env.GMAIL_PASS,
+        user: message.from,
+        pass: passwordEmail,
       },
     });
     logger.info(
@@ -33,7 +39,7 @@ class MailProvider {
         contentType: string;
       }>;
     } = {
-      from: process.env.GMAIL_USER,
+      from: message.from,
       to: message.to.join(", "),
       subject: message.subject,
       text: message.content,

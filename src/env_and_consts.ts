@@ -50,6 +50,13 @@ export const GET_APP_RELEVANT_ENV = () => {
   const QUEUE_NAME = configurationProvider.getRequiredValue("QUEUE_NAME");
   const USE_LOCAL_FILE_ENV =
     configurationProvider.getValue("USE_LOCAL_FILE_ENV") == "true";
+  const EMAIL_ADDRESS_TO_SEND_NOTIFICATIONS =
+    configurationProvider.getRequiredValue(
+      "EMAIL_ADDRESS_TO_SEND_NOTIFICATIONS"
+    );
+  const GMAIL_USER = configurationProvider.getRequiredValue("GMAIL_USER");
+  const GMAIL_PASS = configurationProvider.getRequiredValue("GMAIL_PASS");
+  console.log(GMAIL_USER, GMAIL_PASS, EMAIL_ADDRESS_TO_SEND_NOTIFICATIONS);
   return {
     // SQS_QUEUE_URL,
     FOREIGNS_TABLE_NAME,
@@ -70,5 +77,8 @@ export const GET_APP_RELEVANT_ENV = () => {
     PREFETCH_MESSAGES_COUNT,
     QUEUE_NAME,
     RABBITMQ_URL,
+    EMAIL_ADDRESS_TO_SEND_NOTIFICATIONS,
+    GMAIL_USER,
+    GMAIL_PASS,
   };
 };

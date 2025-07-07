@@ -1,3 +1,4 @@
+import { configurationProvider } from "./configuration_provider";
 import { dynamoDbProvider } from "./dynamodb-provider/dynamodb_provider";
 import { logger } from "./logger";
 import { mailProvider } from "./mail_provider";
@@ -8,8 +9,30 @@ export interface AlertMessage {
 }
 
 export class AlertsProvider {
-  constructor() {}
-
+  listAddressEmail: string[] = [];
+  fromAddressEmail: string = "";
+  fromAddressEmailPassword: string = "";
+  constructor() {
+    logger.info("AlertsProvider - initialized");
+  }
+  init = async ({
+    listAddressEmail,
+    fromAddressEmail,
+    fromAddressEmailPassword,
+  }: {
+    listAddressEmail: string[];
+    fromAddressEmail: string;
+    fromAddressEmailPassword: string;
+  }) => {
+    try {
+      this.listAddressEmail = listAddressEmail;
+      this.fromAddressEmail = fromAddressEmail;
+      this.fromAddressEmailPassword = fromAddressEmailPassword;
+    } catch (error) {
+      logger.error("AlertsProvider - init - error: " + JSON.stringify(error));
+      throw error;
+    }
+  };
   createErrorMessage(errorDetails: string): AlertMessage {
     return {
       type: "error",
@@ -45,18 +68,19 @@ export class AlertsProvider {
 
   public sendAlertSummary = async (): Promise<void> => {
     try {
-      const listAddressEmail =
-        process.env.EMAIL_ADDRESS_TO_SEND_NOTIFICATIONS?.trim()?.split(",") ||
-        [];
       const alertMessage = await this.createSummaryMessage();
       const emailMessage: IEmailMessage = {
-        to: listAddressEmail,
+        to: this.listAddressEmail,
         subject: "Daily Summary - RabbitMQ Messages Engine",
         content: alertMessage.content,
         tagName: "summary",
         files: undefined,
+        from: this.fromAddressEmail,
       };
-      await mailProvider.sendEmailByNodeMailer(emailMessage);
+      await mailProvider.sendEmailByNodeMailer(
+        emailMessage,
+        this.fromAddressEmailPassword
+      );
     } catch (error) {
       logger.error("Failed to send alert:" + error);
     }
@@ -64,9 +88,7 @@ export class AlertsProvider {
   public sendAlertError = async (error: string): Promise<void> => {
     try {
       const alertMessage = await this.createErrorMessage(error);
-      const listAddressEmail =
-        process.env.EMAIL_ADDRESS_TO_SEND_NOTIFICATIONS?.trim()?.split(",") ||
-        [];
+      const listAddressEmail = this.listAddressEmail;
 
       const emailMessage: IEmailMessage = {
         to: listAddressEmail,
@@ -74,8 +96,12 @@ export class AlertsProvider {
         content: alertMessage.content,
         tagName: "error",
         files: undefined,
+        from: this.fromAddressEmail,
       };
-      await mailProvider.sendEmailByNodeMailer(emailMessage);
+      await mailProvider.sendEmailByNodeMailer(
+        emailMessage,
+        this.fromAddressEmailPassword
+      );
     } catch (error) {
       logger.error("Failed to send alert:" + error);
     }

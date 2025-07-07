@@ -85,4 +85,5 @@ export interface IEmailMessage {
   attachments?: [{ fileId: string }];
   tagName: string;
   files?: string;
+  from?: string; // Optional, if not provided, will use the default email address
 }

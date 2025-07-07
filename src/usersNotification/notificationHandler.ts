@@ -9,6 +9,12 @@ import { logger } from "../logger";
 require("@dotenvx/dotenvx").config({
   path: path.join(__dirname, "../.env"),
 });
+
+// handleUsersNotification function processes user notifications
+// It parses the notification, checks its type, and processes it accordingly
+// Returns a MessageStatus indicating the result of the processing
+// If the notification is invalid or an error occurs, it returns MessageStatus.FAILED
+
 export async function handleUsersNotification(
   notification: any
 ): Promise<MessageStatus | undefined> {

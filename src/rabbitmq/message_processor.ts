@@ -44,7 +44,9 @@ export async function processMessage(
         messageContent,
         "Message processing not completed successfully"
       );
-      logger.info("Message processing failed, saving to failed messages");
+      logger.info(
+        "Message processing failed, saving to failed messages" + messageContent
+      );
       channel.ack(message);
     } else {
       //if response is skipped
@@ -53,7 +55,9 @@ export async function processMessage(
         error: 0,
         skipped: 1,
       });
-      logger.info("Message processing skipped, updating counters");
+      logger.info(
+        "Message processing skipped, updating counters" + messageContent
+      );
       channel.ack(message);
     }
   } catch (error: any) {
@@ -64,6 +68,7 @@ export async function processMessage(
     });
     if (devMode)
       await saveFailedMessage(message?.content.toString() || "", error.message);
+    logger.info("Error processing message:" + message?.content.toString());
     logger.error("Error processing message:" + error);
     channel.ack(message);
   }

@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
+    "local-test-remote-secrets": "cross-env AWS_SECRET_NAME='population-registry/test/global-readonly,population-registry/test/global'  nodemon src/index.ts",
     "dev": "cross-env USE_LOCAL_FILE_ENV=true ts-node src/index.ts",
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "tsc",

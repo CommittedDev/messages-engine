@@ -8,17 +8,17 @@ import { GET_APP_RELEVANT_ENV } from "./env_and_consts";
 import { logger } from "./logger";
 import { runConsumerWithRetries } from "./main";
 import { mailProvider } from "./mail_provider";
-import { alertsProvider } from "./alerts_provider";
+import { AlertsProvider, alertsProvider } from "./alerts_provider";
 const { version } = require("../package.json");
 
 const app = express();
-const port = 8008;
+const port = 8009;
 
 app.get("/", (req, res) => {
   res.send(`Messages-engine version ${version} is running`);
 });
 app.get("/health", (req, res) => {
-  res.send(`Server is healthy - version ${version}`);
+  res.send(` Message-engine is healthy - version ${version}`);
 });
 // Set up a cron job to run daily at 9:00 AM
 cron.schedule("0 9 * * *", () => {
@@ -60,6 +60,9 @@ const start = async () => {
     APP_STATE_TABLE_NAME,
     BUCKET_NAME,
     QUEUE_NAME,
+    EMAIL_ADDRESS_TO_SEND_NOTIFICATIONS,
+    GMAIL_USER,
+    GMAIL_PASS,
   } = GET_APP_RELEVANT_ENV();
 
   /**
@@ -72,8 +75,14 @@ const start = async () => {
   });
 
   await dynamoDbProvider.initialize();
-  console.log("Service is running");
-
+  console.log("Service Message-engine is running");
+  await alertsProvider.init({
+    fromAddressEmail: GMAIL_USER,
+    fromAddressEmailPassword: GMAIL_PASS,
+    listAddressEmail: EMAIL_ADDRESS_TO_SEND_NOTIFICATIONS.split(",").map(
+      (email) => email.trim()
+    ),
+  });
   app.listen(port, () => {
     logger.info(
       `Express app listening on port ${port} - just to keep the process running and response to health checks`
